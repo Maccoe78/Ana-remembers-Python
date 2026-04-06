@@ -1,5 +1,7 @@
 import ollama
 
+MODEL_NAAM = "llama3.1:8b"
+
 def analyseer_symptomen(gesprek):
     berichten_tekst = ""
     for bericht in gesprek:
@@ -21,7 +23,7 @@ Gesprek:
 """ + berichten_tekst
 
     antwoord = ollama.chat(
-        model="gemma3:12b",
+        model=MODEL_NAAM,
         messages=[{"role": "user", "content": analyse_vraag}]
     )
 
@@ -35,7 +37,7 @@ def check_escalatie(analyze_tekst):
         if woord in tekst:
             return "NOODGEVAL", "Patient heeft borstpijn gemeld"
     
-    escalatie_woorden = ["escalatie_nodig: ja", "escalatie nodig: ja", "escalation: yes", "direct contact"]
+    escalatie_woorden = ["escalatie_nodig: ja", "escalatie nodig: ja", "escalation: yes",]
     for woord in escalatie_woorden:
         if woord in tekst:
             return "DRINGEND", "Analyse geeft aan dat escalatie nodig is"

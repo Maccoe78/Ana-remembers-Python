@@ -2,6 +2,8 @@ import ollama
 from patient_manager import *
 from escalatie import *
 
+MODEL_NAAM = "llama3.1:8b"
+
 naam = input("Wat is jou naam? ")
 if patient_bestaat(naam):
     patient = laad_patient(naam)
@@ -17,15 +19,17 @@ geschiedenis = [
         "role": "system",
         "content": "Jij bent Ana, een vriendelijke zorgassistent voor hartfalen patienten. "
                    "De patient heet " + naam + ". "
-                   "Stel vragen over: kortademigheid, enkelbewelling, gewicht, en medicijnen. "
+                   "Stel vragen over: kortademigheid, enkelbezwelling, gewicht, en medicijnen. "
                    "Stel elke keer maar een vraag. "
+                   "Als je kortademigheid, enkelzwelling, gewicht en medicijnen hebt besproken, "
+                   "sluit je het gesprek vriendelijk af en schrijf je op de laatste regel precies: [GESPREK_KLAAR] "
                    "Verwijs naar eerdere gesprekken als dat relevant is. "
                    "\n\n" + geheugen
     }
 ]
 
 eerste_bericht = ollama.chat(
-    model="gemma3:12b",
+    model=MODEL_NAAM,
     messages=geschiedenis + [{"role": "user", "content": "Start de check-in"}]
 )
 
@@ -43,11 +47,18 @@ while True:
     geschiedenis.append({"role": "user", "content": gebruiker_input})
 
     antwoord = ollama.chat(
-        model="gemma3:12b",
+        model=MODEL_NAAM,
         messages=geschiedenis
     )
 
     ana_tekst = antwoord["message"]["content"]
+
+    if "[GESPREK_KLAAR]" in ana_tekst:
+        schone_tekst = ana_tekst.replace("[GESPREK_KLAAR]", "").strip()
+        print("Ana:", schone_tekst)
+        geschiedenis.append({"role": "assistant", "content": schone_tekst})
+        break
+
     print("Ana:", ana_tekst)
     geschiedenis.append({"role": "assistant", "content": ana_tekst})
 
