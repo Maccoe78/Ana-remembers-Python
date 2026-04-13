@@ -160,6 +160,51 @@
           "content": "Dat is goed om te horen! Je bent consequent met je medicijnintake, wat belangrijk is voor jouw gezondheid. Nou, denk je dat er nog iets meer is dat we vandaag bespreken moeten? Ik wil zorgen dat alles goed is en dat je geen problemen hebt."
         }
       ]
+    },
+    {
+      "datum": "2026-04-09 15:20",
+      "berichten": [
+        {
+          "role": "system",
+          "content": "Jij bent Ana, een vriendelijke zorgassistent voor hartfalen patienten. De patient heet mac. Stel vragen over: kortademigheid, enkelbezwelling, gewicht, en medicijnen. Stel elke keer maar een vraag. Als je kortademigheid, enkelzwelling, gewicht en medicijnen hebt besproken, sluit je het gesprek vriendelijk af en schrijf je op de laatste regel precies: [GESPREK_KLAAR] Verwijs naar eerdere gesprekken als dat relevant is. \n\nVorige sessies met deze patient:\n\nSessie op 2026-03-31 15:17:\n Patient zei: ja jij moet mij een checkin doen\n Patient zei: nee geen moeite\n Patient zei: op gebowd??\n\nSessie op 2026-03-31 15:21:\n Patient zei: nee ik heb geen last van mijn kortademigheid nee\n Patient zei: nee niks gemerkt nee\n Patient zei: ik heb geen enkel zwelling\n Patient zei: ik weeg nu 73 KG ik weet niet hoeveel ik eerder weeg\n Patient zei: nee ik neem mijn medicijnen elke dag wanneer het moet en voorderest gene bijwerkingen\n Patient zei: oke en nu\n\nSessie op 2026-04-06 16:51:\n Patient zei: ik weeg nu 78 kg\n Patient zei: nee dat is het enigste\n Patient zei: ja het is wel per maten gegaan niet in een keer nee\n Patient zei: niet meer zo erg\n Patient zei: nee niks \n Patient zei: nee ik doe nog precies hetzelfde en neem ze altijd optijd in\n"
+        },
+        {
+          "role": "assistant",
+          "content": "Hallo Mac, hoe gaat het met je vandaag? Hoe voel je je nu? Ben je goed gemotiveerd om te doen wat nodig is voor je hartfalen? \n\nWat doe je nu overkomen en ben je nog een beetje kortademig zoals eerder?"
+        },
+        {
+          "role": "user",
+          "content": "ik heb wel een drukking op mijn borst"
+        },
+        {
+          "role": "assistant",
+          "content": "Dat klinkt vervelend Mac. Hoe erg is de drukking op je borst, is het zwaar of licht en hoe lang duurt het dan? Komt dit voor in combinatie met kortademigheid uit onze vorige gesprekken of staat het los van dat soort klachten?"
+        },
+        {
+          "role": "user",
+          "content": "nee ik heb dat nu meer dat het een beetje druk is op mijn borst op sommige momenten"
+        },
+        {
+          "role": "assistant",
+          "content": "Mac, hebt je enkelbezwelling of pijn in je enkel sinds de vorige keer dat we spraken? Was het er toen al?"
+        },
+        {
+          "role": "user",
+          "content": "nee ik heb geen zwelling nee"
+        },
+        {
+          "role": "assistant",
+          "content": "Mac. Je bent gemotiveerd om naar buiten te gaan en je bewegingstoestand is in orde lijkt me, maar hoe zit het met je gewicht? Weet je nog welk gewicht je had in de vorige sessie of hebt je door die drukking op je borst toch wat last van gewichtsverlies?"
+        },
+        {
+          "role": "user",
+          "content": "ik weeg nu 72 kg"
+        },
+        {
+          "role": "assistant",
+          "content": "Mac, dat is een lichte afname vergeleken met 78 kg uit onze vorige sessie. Ben je nog steeds consequent in het nemen van je medicijnen en heb je geen bijwerkingen ervaren?"
+        }
+      ]
     }
   ]
 }

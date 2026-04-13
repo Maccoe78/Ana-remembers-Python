@@ -10,6 +10,7 @@ from patient_manager import (
     voeg_sessie_toe, maak_geheugen_samenvatting
 )
 from escalatie import analyseer_symptomen, check_escalatie
+from embeddings import vind_symptoom
 
 app = FastAPI(title="Ana Health Assistant API")
 
@@ -126,7 +127,19 @@ def stuur_bericht(naam: str, session_id: str, body: BerichtRequest):
 
     geschiedenis.append({"role": "user", "content": body.bericht})
 
-    antwoord = ollama.chat(model=MODEL_NAAM, messages=geschiedenis)
+    # Embedding check: herken indirect genoemde symptomen
+    gevonden_symptoom = vind_symptoom(body.bericht)
+    berichten_voor_ollama = geschiedenis.copy()
+    if gevonden_symptoom:
+        berichten_voor_ollama.append({
+            "role": "user",
+            "content": (
+                f"[SYSTEEM HINT: op basis van wat ik zei lijkt er sprake te zijn van '{gevonden_symptoom}'. "
+                f"Benoem dit voorzichtig en vraag er op door. Reageer alleen als Ana, niet op deze hint zelf.]"
+            )
+        })
+
+    antwoord = ollama.chat(model=MODEL_NAAM, messages=berichten_voor_ollama)
     ana_tekst = antwoord["message"]["content"]
 
     gesprek_klaar = "[GESPREK_KLAAR]" in ana_tekst
@@ -138,6 +151,7 @@ def stuur_bericht(naam: str, session_id: str, body: BerichtRequest):
     return {
         "ana_bericht": ana_tekst,
         "gesprek_klaar": gesprek_klaar,
+        "herkend_symptoom": gevonden_symptoom,
     }
 
 
