@@ -1,5 +1,6 @@
 import ollama
 import numpy as np
+from database import sla_embedding_op, laad_embedding
 
 # Bekende symptomen met beschrijvingen in natuurlijke taal
 # Hoe meer beschrijvingen, hoe beter de herkenning
@@ -51,7 +52,7 @@ def cosine_similarity(a: list, b: list) -> float:
 def vind_symptoom(tekst: str, drempel: float = 0.75) -> str | None:
     """
     Vergelijk wat de patient zei met bekende symptomen.
-    Geeft de naam van het symptoom terug als de match goed genoeg is.
+    Symptoom-embeddings worden gecached in de database zodat ze niet elke keer herberekend worden.
     """
     patient_embedding = maak_embedding(tekst)
 
@@ -59,7 +60,12 @@ def vind_symptoom(tekst: str, drempel: float = 0.75) -> str | None:
     beste_score = 0.0
 
     for symptoom_naam, beschrijving in SYMPTOMEN.items():
-        symptoom_embedding = maak_embedding(beschrijving)
+        # Probeer uit de database te laden, anders berekenen en opslaan
+        symptoom_embedding = laad_embedding(symptoom_naam)
+        if symptoom_embedding is None:
+            symptoom_embedding = maak_embedding(beschrijving)
+            sla_embedding_op(symptoom_naam, beschrijving, symptoom_embedding)
+
         score = cosine_similarity(patient_embedding, symptoom_embedding)
 
         if score > beste_score:

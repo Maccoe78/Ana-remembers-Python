@@ -1,15 +1,15 @@
-import os
 import uuid
 import ollama
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from patient_manager import (
-    patient_bestaat, nieuwe_patient, laad_patient, sla_patient_op,
-    voeg_sessie_toe, maak_geheugen_samenvatting
+from database import (
+    patient_bestaat, nieuwe_patient, laad_patient,
+    maak_geheugen_samenvatting, sla_sessie_op, haal_sessies_op,
+    get_verbinding
 )
-from escalatie import analyseer_symptomen, check_escalatie
+from escalatie import analyseer_symptomen, check_escalatie, genereer_samenvatting
 from embeddings import vind_symptoom
 
 app = FastAPI(title="Ana Health Assistant API")
@@ -23,12 +23,25 @@ app.add_middleware(
 
 MODEL_NAAM = "llama3.1:8b"
 
-# In-memory session store: session_id -> { patient, geschiedenis }
+# In-memory session store: session_id -> { patient_naam, geschiedenis }
 actieve_sessies: dict = {}
 
 
 class BerichtRequest(BaseModel):
     bericht: str
+
+
+def parse_analyse(analyse_tekst: str) -> dict:
+    """Zet de tekstuele analyse van Ollama om naar een gestructureerd dict."""
+    result = {}
+    for lijn in analyse_tekst.lower().splitlines():
+        if "kortademigheid:" in lijn:
+            result["kortademigheid"] = lijn.split(":", 1)[1].strip()
+        elif "enkelbew" in lijn and ":" in lijn:
+            result["enkelbezwelling"] = lijn.split(":", 1)[1].strip()
+        elif lijn.startswith("trend:"):
+            result["trend"] = lijn.split(":", 1)[1].strip()
+    return result
 
 
 # ------------------------------------------------------------------
@@ -38,59 +51,70 @@ class BerichtRequest(BaseModel):
 @app.get("/patients")
 def lijst_patienten():
     """Geef een lijst van alle patiëntnamen terug."""
-    map_naam = "patient_data"
-    if not os.path.exists(map_naam):
-        return []
-    bestanden = [b for b in os.listdir(map_naam) if b.endswith(".json")]
-    return [b.replace(".json", "") for b in bestanden]
+    with get_verbinding() as db:
+        rijen = db.execute("SELECT naam FROM patienten").fetchall()
+    return [r["naam"] for r in rijen]
 
 
 @app.get("/patients/{naam}")
 def get_patient(naam: str):
-    """Haal patiëntgegevens op zonder volledige berichtenhistorie."""
+    """Haal patiëntgegevens en sessie-overzicht op."""
     if not patient_bestaat(naam):
         raise HTTPException(status_code=404, detail="Patient niet gevonden")
     patient = laad_patient(naam)
+    sessies = haal_sessies_op(naam)
     return {
         "naam": patient["naam"],
         "medicijnen": patient["medicijnen"],
-        "sessies": [
-            {
-                "datum": s["datum"],
-                "aantal_berichten": len([b for b in s["berichten"] if b["role"] == "user"]),
-            }
-            for s in patient["sessies"]
-        ],
+        "sessies": sessies,
     }
 
 
+# ------------------------------------------------------------------
+# Sessie beheer
+# ------------------------------------------------------------------
+
 @app.post("/patients/{naam}/session/start")
 def start_sessie(naam: str):
-    """
-    Start een nieuwe check-in sessie voor een patiënt.
-    Geeft een session_id en de openingsboodschap van Ana terug.
-    """
-    if patient_bestaat(naam):
-        patient = laad_patient(naam)
-        is_nieuw = False
-    else:
-        patient = nieuwe_patient(naam)
-        is_nieuw = True
+    """Start een nieuwe check-in sessie voor een patiënt."""
+    if not patient_bestaat(naam):
+        nieuwe_patient(naam)
 
-    geheugen = maak_geheugen_samenvatting(patient)
+    sessies = haal_sessies_op(naam)
+    is_nieuw = len(sessies) == 0
+
+    geheugen = maak_geheugen_samenvatting(naam)
+
+    if is_nieuw:
+        geheugen_instructie = (
+            "BELANGRIJK: Dit is de ALLEREERSTE keer dat je deze patient spreekt. "
+            "Er zijn GEEN eerdere gesprekken. Zeg NOOIT dingen zoals 'sinds de vorige keer' "
+            "of 'de laatste keer dat we spraken'. Stel jezelf voor als Ana."
+        )
+    else:
+        geheugen_instructie = (
+            "Verwijs naar eerdere gesprekken als dat relevant is. "
+            "Gebruik ALLEEN informatie die expliciet in de vorige sessies staat hieronder, verzin niets. "
+            "\n\n" + geheugen
+        )
 
     geschiedenis = [
         {
             "role": "system",
             "content": (
-                "Jij bent Ana, een vriendelijke zorgassistent voor hartfalen patienten. "
+                "Jij bent Ana, een warme en vriendelijke zorgassistent voor hartfalen patienten. "
                 "De patient heet " + naam + ". "
-                "Stel vragen over: kortademigheid, enkelbezwelling, gewicht, en medicijnen. "
-                "Stel elke keer maar een vraag. "
-                "Als je kortademigheid, enkelzwelling, gewicht en medicijnen hebt besproken, "
-                "sluit je het gesprek vriendelijk af en schrijf je op de laatste regel precies: [GESPREK_KLAAR] "
-                "Verwijs naar eerdere gesprekken als dat relevant is. "
-                "\n\n" + geheugen
+                "Vraag niet naar wat hij in de ochtend heeft gedaan of hoe de nacht was, maar focus op hoe hij zich NU voelt en de symptomen die hij NU ervaart. "
+                "VERBODEN: verzin geen eerdere gesprekken, stel geen vragen over andere medische onderwerpen, "
+                "Doe een check-in gesprek zoals een zorgzame verpleegster dat zou doen. "
+                "Stel jezelf voor, vraag hoe de patient zich voelt, en bespreek dan deze 4 onderwerpen: "
+                "kortademigheid, zwelling in enkels of benen, gewicht, en medicijnen. "
+                "Stel EEN vraag per keer en wacht op het antwoord voordat je verdergaat. "
+                "Reageer kort en empathisch op elk antwoord voordat je de volgende vraag stelt. "
+                "doe geen lichamelijk onderzoek voor, en maak geen beloftes die je niet kunt nakomen. "
+                "Als alle 4 onderwerpen besproken zijn, sluit vriendelijk af met een korte samenvatting "
+                "en schrijf op de LAATSTE REGEL ALLEEN: GESPREK_KLAAR\n"
+                "\n\n" + geheugen_instructie
             ),
         }
     ]
@@ -104,7 +128,7 @@ def start_sessie(naam: str):
 
     session_id = str(uuid.uuid4())
     actieve_sessies[session_id] = {
-        "patient": patient,
+        "patient_naam": naam.lower().strip(),
         "geschiedenis": geschiedenis,
     }
 
@@ -118,7 +142,7 @@ def start_sessie(naam: str):
 
 @app.post("/patients/{naam}/session/{session_id}/message")
 def stuur_bericht(naam: str, session_id: str, body: BerichtRequest):
-   
+    """Stuur een bericht naar Ana en ontvang haar antwoord."""
     if session_id not in actieve_sessies:
         raise HTTPException(status_code=404, detail="Sessie niet gevonden")
 
@@ -142,9 +166,9 @@ def stuur_bericht(naam: str, session_id: str, body: BerichtRequest):
     antwoord = ollama.chat(model=MODEL_NAAM, messages=berichten_voor_ollama)
     ana_tekst = antwoord["message"]["content"]
 
-    gesprek_klaar = "[GESPREK_KLAAR]" in ana_tekst
+    gesprek_klaar = "[GESPREK_KLAAR]" in ana_tekst or "GESPREK_KLAAR" in ana_tekst
     if gesprek_klaar:
-        ana_tekst = ana_tekst.replace("[GESPREK_KLAAR]", "").strip()
+        ana_tekst = ana_tekst.replace("[GESPREK_KLAAR]", "").replace("GESPREK_KLAAR", "").strip()
 
     geschiedenis.append({"role": "assistant", "content": ana_tekst})
 
@@ -157,23 +181,29 @@ def stuur_bericht(naam: str, session_id: str, body: BerichtRequest):
 
 @app.post("/patients/{naam}/session/{session_id}/end")
 def beeindig_sessie(naam: str, session_id: str):
-    
+    """Beëindig de sessie, analyseer symptomen en sla op in de database."""
     if session_id not in actieve_sessies:
         raise HTTPException(status_code=404, detail="Sessie niet gevonden")
 
     sessie = actieve_sessies.pop(session_id)
-    patient = sessie["patient"]
+    patient_naam = sessie["patient_naam"]
     geschiedenis = sessie["geschiedenis"]
 
-    voeg_sessie_toe(patient, geschiedenis)
+    # Analyseer het gesprek
+    analyse_tekst = analyseer_symptomen(geschiedenis)
+    niveau, reden = check_escalatie(analyse_tekst)
 
-    analyse = analyseer_symptomen(geschiedenis)
-    niveau, reden = check_escalatie(analyse)
+    # Zet de analyse tekst om naar gestructureerd dict
+    analyse = parse_analyse(analyse_tekst)
+    analyse["escalatie_niveau"] = niveau
+    analyse["reden"] = reden
+    analyse["samenvatting"] = genereer_samenvatting(geschiedenis)
 
-    sla_patient_op(patient)
+    # Sla op in de database
+    sla_sessie_op(patient_naam, geschiedenis, analyse)
 
     return {
         "escalatie_niveau": niveau,
         "reden": reden,
-        "analyse_tekst": analyse,
+        "analyse_tekst": analyse_tekst,
     }

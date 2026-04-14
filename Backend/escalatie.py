@@ -29,6 +29,33 @@ Gesprek:
 
     return antwoord["message"]["content"]
 
+
+def genereer_samenvatting(gesprek: list) -> str:
+    """
+    Genereer een korte samenvatting van wat de patient zei in dit gesprek.
+    Dit wordt opgeslagen zodat Ana er in volgende sessies naar kan verwijzen.
+    """
+    berichten_tekst = ""
+    for bericht in gesprek:
+        if bericht["role"] == "user":
+            berichten_tekst += "Patient: " + bericht["content"] + "\n"
+
+    vraag = (
+        "Schrijf een korte samenvatting (max 2 zinnen) van wat de patient vertelde in dit gesprek. "
+        "Focus op specifieke details zoals wanneer klachten optreden, hoe erg ze zijn, "
+        "en of medicijnen genomen zijn. Schrijf vanuit het perspectief van een zorgassistent. "
+        "Gebruik geen opsommingen, schrijf gewone zinnen.\n\n"
+        "Gesprek:\n" + berichten_tekst
+    )
+
+    antwoord = ollama.chat(
+        model=MODEL_NAAM,
+        messages=[{"role": "user", "content": vraag}]
+    )
+
+    return antwoord["message"]["content"].strip()
+
+
 def check_escalatie(analyze_tekst):
     tekst = analyze_tekst.lower()
 
