@@ -31,8 +31,10 @@ export default function ChatPagina() {
   const [laden, setLaden] = useState(false);
   const [gesprekKlaar, setGesprekKlaar] = useState(false);
   const [escalatie, setEscalatie] = useState<EscalatieResultaat | null>(null);
+  const [opnemen, setOpnemen] = useState(false);
   const onderRef = useRef<HTMLDivElement>(null);
   const sessieGestart = useRef(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
 
   const snelOpties = ["Kortademigheid", "Vermoeidheid", "Zwelling benen", "Slecht slapen"];
 
@@ -52,6 +54,60 @@ export default function ChatPagina() {
     onderRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [berichten]);
 
+  async function speelAudio(tekst: string) {
+    try {
+      const res = await fetch(`${API}/text-to-speech`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bericht: tekst }),
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+    } catch {
+      // stil falen als audio niet werkt
+    }
+  }
+
+  async function startOpname() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", blob, "opname.webm");
+
+        try {
+          const res = await fetch(`${API}/speech-to-text`, {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          await stuurBericht(data.tekst);
+        } catch {
+          setBerichten((prev) => [...prev, { rol: "ana", tekst: "Kon spraak niet verwerken.", tijd: huidigetijd() }]);
+        }
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      recorder.start();
+      recorderRef.current = recorder;
+      setOpnemen(true);
+    } catch {
+      alert("Geen toegang tot microfoon.");
+    }
+  }
+
+  function stopOpname() {
+    recorderRef.current?.stop();
+    setOpnemen(false);
+  }
+
   async function startSessie() {
     setLaden(true);
     try {
@@ -61,6 +117,7 @@ export default function ChatPagina() {
       const data = await res.json();
       setSessionId(data.session_id);
       setBerichten([{ rol: "ana", tekst: data.ana_bericht, tijd: huidigetijd() }]);
+      speelAudio(data.ana_bericht);
     } catch {
       setBerichten([{ rol: "ana", tekst: "Kon geen verbinding maken met de server.", tijd: huidigetijd() }]);
     }
@@ -86,6 +143,7 @@ export default function ChatPagina() {
       );
       const data = await res.json();
       setBerichten((prev) => [...prev, { rol: "ana", tekst: data.ana_bericht, tijd: huidigetijd() }]);
+      speelAudio(data.ana_bericht);
 
       if (data.gesprek_klaar) {
         setGesprekKlaar(true);
@@ -184,12 +242,19 @@ export default function ChatPagina() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && stuurBericht(input)}
-            disabled={laden}
+            disabled={laden || opnemen}
             className="flex-1 border border-red-200 rounded-full px-5 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 disabled:opacity-40"
           />
           <button
+            onClick={opnemen ? stopOpname : startOpname}
+            disabled={laden}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition disabled:opacity-40 ${opnemen ? "bg-red-700 animate-pulse" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+          >
+            🎤
+          </button>
+          <button
             onClick={() => stuurBericht(input)}
-            disabled={laden || input.trim() === ""}
+            disabled={laden || input.trim() === "" || opnemen}
             className="w-12 h-12 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition disabled:opacity-40"
           >
             ➤

@@ -1,12 +1,14 @@
 import os
 import tempfile
 import whisper
+import torch
 from fastapi import UploadFile
 from fastapi.responses import Response
 from gtts import gTTS
 
 # Laad Whisper model eenmalig bij opstarten
-whisper_model = whisper.load_model("tiny")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+whisper_model = whisper.load_model("small", device=device)
 
 
 async def speech_to_text(audio_bestand: UploadFile) -> str:
