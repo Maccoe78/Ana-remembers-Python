@@ -1,8 +1,11 @@
 import uuid
 import ollama
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from database import (
     patient_bestaat, nieuwe_patient, laad_patient,
@@ -11,6 +14,7 @@ from database import (
 )
 from escalatie import analyseer_symptomen, check_escalatie, genereer_samenvatting
 from embeddings import vind_symptoom
+from voice import speech_to_text, text_to_speech
 
 app = FastAPI(title="Ana Health Assistant API")
 
@@ -207,3 +211,20 @@ def beeindig_sessie(naam: str, session_id: str):
         "reden": reden,
         "analyse_tekst": analyse_tekst,
     }
+
+
+# ------------------------------------------------------------------
+# Stem endpoints
+# ------------------------------------------------------------------
+
+@app.post("/speech-to-text")
+async def stt_endpoint(audio: UploadFile = File(...)):
+    """Ontvang een audiobestand en geef de getranscribeerde tekst terug."""
+    tekst = await speech_to_text(audio)
+    return {"tekst": tekst}
+
+
+@app.post("/text-to-speech")
+async def tts_endpoint(body: BerichtRequest):
+    """Ontvang tekst en geef een audiobestand terug."""
+    return text_to_speech(body.bericht)
